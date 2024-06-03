@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QGroupBox, QGridLayout, QComboBox
+    QLineEdit, QPushButton, QGroupBox, QGridLayout, QComboBox, QScrollArea
 )
 from PyQt6.QtGui import QPixmap, QDoubleValidator
 from qiskit import QuantumCircuit
@@ -18,6 +18,7 @@ class QuantumCircuitGUI(QWidget):
         super().__init__()
         self.simulator = AerSimulator()
         self.initUI()
+
 
     def initUI(self):
         self.setWindowTitle('Quantum Circuit GUI')
@@ -36,7 +37,14 @@ class QuantumCircuitGUI(QWidget):
                 font-weight: bold;
             }
         """)
-        circuit_diagram_layout = QVBoxLayout()
+        
+        # Scroll area for circuit diagrams
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        
+        # Widget to contain the circuit diagram labels
+        self.circuit_widget = QWidget()
+        circuit_diagram_layout = QVBoxLayout(self.circuit_widget)
         
         # Add QLabel widgets for the circuit diagrams
         self.circuit_diagram_label_1 = QLabel('', self)
@@ -47,7 +55,13 @@ class QuantumCircuitGUI(QWidget):
         circuit_diagram_layout.addWidget(self.circuit_diagram_label_2)
         circuit_diagram_layout.addWidget(self.circuit_diagram_label_3)
 
-        self.circuit_diagram_group.setLayout(circuit_diagram_layout)
+        self.scroll_area.setWidget(self.circuit_widget)
+        
+        # Add the scroll area to the circuit diagram group layout
+        circuit_diagram_group_layout = QVBoxLayout()
+        circuit_diagram_group_layout.addWidget(self.scroll_area)
+        self.circuit_diagram_group.setLayout(circuit_diagram_group_layout)
+
         main_layout.addWidget(self.circuit_diagram_group)
         
         # Bottom layout
@@ -150,33 +164,17 @@ class QuantumCircuitGUI(QWidget):
         submit_button.clicked.connect(self.onSubmit)
         param_config_layout.addWidget(submit_button, 0)  # Align center horizontally
         
+        # Clear Button
+        clear_button = QPushButton('Clear', self)
+        clear_button.setFixedSize(100, 40)  # Set size for the clear button
+        clear_button.clicked.connect(self.clear_circuits)
+        param_config_layout.addWidget(clear_button, 0)  # Align center horizontally
+
         # Set the layout
         self.setLayout(main_layout)
         self.update_spin_system_parameters()  # Initialize the visibility of the parameters
         self.show()
-    def update_spin_system_parameters(self):
-        self.selected_spin = self.spin_system_dropdown.currentIndex()
-        params_to_show = {
-            0: [0, 1, 2],  # Spin-1: Constant µ, Magnetic field strength, Time interval
-            1: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],  # Spin-2: Time interval, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2
-            2: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # Spin-3: Time interval, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, theta_3, phi_3, lambda_3, Number of Trotter steps
-        }
-        
-        for i, (label, edit) in enumerate(zip(self.hamiltonian_labels, self.hamiltonian_edits)):
-            if i in params_to_show[self.selected_spin]:
-                label.show()
-                edit.show()
-            else:
-                label.hide()
-                edit.hide()       
-    def onSubmit(self):
-        # Gather input data
-        circuit_params = {}
-        for i, edit in enumerate(self.hamiltonian_edits):
-            if edit.isVisible():
-                circuit_params[self.hamiltonian_labels[i].text()] = edit.text()
-        
-        self.build_circuit(circuit_params, self.selected_spin)
+
 
     def build_circuit(self, params, selected_spin):
         circ_1, circ_2, circ_3 = None, None, None
@@ -207,7 +205,7 @@ class QuantumCircuitGUI(QWidget):
             phi_2 = float(params.get('phi_2:', 10))
             lambda_2 = float(params.get('lambda_2:', 11))
 
-            circ_1, circ_2, circ_3, Sx, Sy, Sz = self.build_spin_two_system(del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2)
+            circ_1, circ_2, circ_3, (Sx1, Sy1), (Sz1, Sx2), (Sy2, Sz2) = self.build_spin_two_system(del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2)
             spin_2 = True
 
         elif selected_spin == 2:  # If Spin-3 System is selected
@@ -242,17 +240,28 @@ class QuantumCircuitGUI(QWidget):
             self.circuit_diagram_label_1.setPixmap(pixmap_1)
 
             spin_1 = False
+            circ_1 = None, None, None
 
         if spin_2:
             Nt = int(10//del_t)
             tau_range = np.linspace(0,10,Nt)
 
-            #self.plot_spin_two_system(tau_range, Sx, Sy, Sz)
+            self.plot_spin_two_system(tau_range, Sx1, Sy1, Sz1, Sx2, Sy2, Sz2)
+
+            circuit_image_1 = circuit_drawer(circ_1, output='mpl')
+            circuit_image_1.savefig('/tmp/circuit1.png')  # Save the image temporarily
+            pixmap_1 = QPixmap('/tmp/circuit1.png')
+            self.circuit_diagram_label_1.setPixmap(pixmap_1)
 
             circuit_image_2 = circuit_drawer(circ_2, output='mpl')
             circuit_image_2.savefig('/tmp/circuit2.png')  # Save the image temporarily
             pixmap_2 = QPixmap('/tmp/circuit2.png')
             self.circuit_diagram_label_2.setPixmap(pixmap_2)
+
+            circuit_image_3 = circuit_drawer(circ_3, output='mpl')
+            circuit_image_3.savefig('/tmp/circuit3.png')  # Save the image temporarily
+            pixmap_3 = QPixmap('/tmp/circuit3.png')
+            self.circuit_diagram_label_3.setPixmap(pixmap_3)
 
             spin_2 = False
 
@@ -266,8 +275,7 @@ class QuantumCircuitGUI(QWidget):
             pixmap_3 = QPixmap('/tmp/circuit3.png')
             self.circuit_diagram_label_3.setPixmap(pixmap_3)
 
-            spin_3 = False
-    
+            spin_3 = False   
     def build_spin_one_system(self, mu, B_0, del_t):
         tau = Parameter('τ')
         qr = QuantumRegister(3,'q')
@@ -519,8 +527,8 @@ class QuantumCircuitGUI(QWidget):
         return St
 
     def plot_spin_one_system(self, tau_range, Sx, Sy, Sz, Nt):
-        plt.clf()  # Clear the current figure
-        plt.cla()  # Clear the current axes
+        plt.close('all')  # Close all open figure windows
+        plt.figure()  # Create a new figure
         plt.plot(tau_range, Sx, 'bo', label='<Sx>')
         plt.plot(tau_range, Sy, 'ro', label='<Sy>')
         plt.plot(tau_range, Sz, 'ko', label='<Sz>')
@@ -531,19 +539,31 @@ class QuantumCircuitGUI(QWidget):
         plt.ylabel('<S>')
         plt.legend()
         plt.show()
-
-    def plot_spin_two_system(self, tau_range, Sx, Sy, Sz):
+    def plot_spin_two_system(self, tau_range, Sx1, Sy1, Sz1, Sx2, Sy2, Sz2):
         # Time evolution graph of the first spin
-        plt.plot(tau_range,Sx,'r--')
-        plt.plot(tau_range,Sy,'b-.')
-        plt.plot(tau_range,Sz,'k-')
+        plt.close('all')  # Close all open figure windows
+        plt.figure()  # Create a new figure
+        plt.plot(tau_range,Sx1,'r--')
+        plt.plot(tau_range,Sy1,'b-.')
+        plt.plot(tau_range,Sz1,'k-')
         plt.xlabel('Jt')
         plt.ylim(-0.5,0.5)
         plt.ylabel('$<S_{1}^{j}>/\hbar$')
         plt.legend(['j=x','j=y','j=z'])
         plt.show()
+
+        plt.figure()  # Create a new figure
+        plt.plot(tau_range,Sx2,'r--')
+        plt.plot(tau_range,Sy2,'b-.')
+        plt.plot(tau_range,Sz2,'k-')
+        plt.xlabel('Jt')
+        plt.ylabel('$<S_{2}^{j}>/\hbar$')
+        plt.legend(['j=x','j=y','j=z'])
+        plt.show()
     def plot_spin_three_system(self, tau_range, Sxt, Syt, Szt):
         # Time evolution graph of the first spin
+        plt.close('all')  # Close all open figure windows
+        plt.figure()  # Create a new figure
         plt.plot(tau_range,Sxt[0,:],'r--')
         plt.plot(tau_range,Syt[0,:],'b-.')
         plt.plot(tau_range,Szt[0,:],'k-')
@@ -573,6 +593,7 @@ class QuantumCircuitGUI(QWidget):
         plt.legend(['j=x','j=y','j=z'])
         plt.show()
 
+
     def N(self, α, β, γ, circ, q1, q2):
         circ.rz(-0.5*np.pi,q2)
         circ.cx(q2,q1)
@@ -582,6 +603,33 @@ class QuantumCircuitGUI(QWidget):
         circ.ry(0.5*np.pi-2.0*β,q2)
         circ.cx(q2,q1)
         circ.rz(0.5*np.pi,q1)
+    def clear_circuits(self):
+        self.circuit_diagram_label_1.clear()
+        self.circuit_diagram_label_2.clear()
+        self.circuit_diagram_label_3.clear()
+    def update_spin_system_parameters(self):
+        self.selected_spin = self.spin_system_dropdown.currentIndex()
+        params_to_show = {
+            0: [0, 1, 2],  # Spin-1: Constant µ, Magnetic field strength, Time interval
+            1: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],  # Spin-2: Time interval, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2
+            2: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # Spin-3: Time interval, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, theta_3, phi_3, lambda_3, Number of Trotter steps
+        }
+        
+        for i, (label, edit) in enumerate(zip(self.hamiltonian_labels, self.hamiltonian_edits)):
+            if i in params_to_show[self.selected_spin]:
+                label.show()
+                edit.show()
+            else:
+                label.hide()
+                edit.hide()        
+    def onSubmit(self):
+        # Gather input data
+        circuit_params = {}
+        for i, edit in enumerate(self.hamiltonian_edits):
+            if edit.isVisible():
+                circuit_params[self.hamiltonian_labels[i].text()] = edit.text()
+        
+        self.build_circuit(circuit_params, self.selected_spin)
 
 
 if __name__ == '__main__':
