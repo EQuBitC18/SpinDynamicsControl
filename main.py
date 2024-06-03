@@ -240,7 +240,6 @@ class QuantumCircuitGUI(QWidget):
             self.circuit_diagram_label_1.setPixmap(pixmap_1)
 
             spin_1 = False
-            circ_1 = None, None, None
 
         if spin_2:
             Nt = int(10//del_t)
@@ -268,7 +267,18 @@ class QuantumCircuitGUI(QWidget):
         if spin_3:
             Nt = int(10//del_t)
             tau_range = np.linspace(0,10,Nt)
+
             self.plot_spin_three_system(tau_range, Sx, Sy, Sz)
+
+            circuit_image_1 = circuit_drawer(circ_1, output='mpl')
+            circuit_image_1.savefig('/tmp/circuit1.png')  # Save the image temporarily
+            pixmap_1 = QPixmap('/tmp/circuit1.png')
+            self.circuit_diagram_label_1.setPixmap(pixmap_1)
+
+            circuit_image_2 = circuit_drawer(circ_2, output='mpl')
+            circuit_image_2.savefig('/tmp/circuit2.png')  # Save the image temporarily
+            pixmap_2 = QPixmap('/tmp/circuit2.png')
+            self.circuit_diagram_label_2.setPixmap(pixmap_2)
 
             circuit_image_3 = circuit_drawer(circ_3, output='mpl')
             circuit_image_3.savefig('/tmp/circuit3.png')  # Save the image temporarily
@@ -276,6 +286,7 @@ class QuantumCircuitGUI(QWidget):
             self.circuit_diagram_label_3.setPixmap(pixmap_3)
 
             spin_3 = False   
+    
     def build_spin_one_system(self, mu, B_0, del_t):
         tau = Parameter('τ')
         qr = QuantumRegister(3,'q')
@@ -538,6 +549,7 @@ class QuantumCircuitGUI(QWidget):
         plt.xlabel('$\omega t$')
         plt.ylabel('<S>')
         plt.legend()
+        plt.title("Time evolution graph of a single spin")
         plt.show()
     def plot_spin_two_system(self, tau_range, Sx1, Sy1, Sz1, Sx2, Sy2, Sz2):
         # Time evolution graph of the first spin
@@ -550,8 +562,10 @@ class QuantumCircuitGUI(QWidget):
         plt.ylim(-0.5,0.5)
         plt.ylabel('$<S_{1}^{j}>/\hbar$')
         plt.legend(['j=x','j=y','j=z'])
+        plt.title("Time evolution graph of the first spin")
         plt.show()
 
+        # Time evolution graph of the second spin
         plt.figure()  # Create a new figure
         plt.plot(tau_range,Sx2,'r--')
         plt.plot(tau_range,Sy2,'b-.')
@@ -559,6 +573,7 @@ class QuantumCircuitGUI(QWidget):
         plt.xlabel('Jt')
         plt.ylabel('$<S_{2}^{j}>/\hbar$')
         plt.legend(['j=x','j=y','j=z'])
+        plt.title("Time evolution graph of the second spin")
         plt.show()
     def plot_spin_three_system(self, tau_range, Sxt, Syt, Szt):
         # Time evolution graph of the first spin
@@ -571,9 +586,11 @@ class QuantumCircuitGUI(QWidget):
         plt.ylim(-0.6,0.6)
         plt.ylabel('$<S_{1}^{j}>/\hbar$')
         plt.legend(['j=x','j=y','j=z'])
+        plt.title("Time evolution graph of the first spin")
         plt.show()
 
         # Time evolution graph of the second spin
+        plt.figure()  # Create a new figure
         plt.plot(tau_range,Sxt[1,:],'r--')
         plt.plot(tau_range,Syt[1,:],'b-.')
         plt.plot(tau_range,Szt[1,:],'k-')
@@ -581,9 +598,11 @@ class QuantumCircuitGUI(QWidget):
         plt.ylim(-0.6,0.6)
         plt.ylabel('$<S_{1}^{j}>/\hbar$')
         plt.legend(['j=x','j=y','j=z'])
+        plt.title("Time evolution graph of the second spin")
         plt.show()
 
         # Time evolution graph of the third spin
+        plt.figure()  # Create a new figure
         plt.plot(tau_range,Sxt[2,:],'r--')
         plt.plot(tau_range,Syt[2,:],'b-.')
         plt.plot(tau_range,Szt[2,:],'k-')
@@ -591,6 +610,7 @@ class QuantumCircuitGUI(QWidget):
         plt.ylim(-0.6,0.6)
         plt.ylabel('$<S_{1}^{j}>/\hbar$')
         plt.legend(['j=x','j=y','j=z'])
+        plt.title("Time evolution graph of the third spin")
         plt.show()
 
 
