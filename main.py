@@ -1,4 +1,3 @@
-import os
 import sys
 import numpy as np
 from matplotlib import pyplot as plt
@@ -8,12 +7,12 @@ from qiskit.visualization import circuit_drawer
 from qiskit import *
 from qiskit.circuit import Parameter
 from qiskit_aer import AerSimulator
-from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2
-from qiskit.result import Counts
-from qiskit_ibm_provider import least_busy
+from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit.primitives import BackendSampler
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QGroupBox, QGridLayout, QComboBox, QScrollArea, QCheckBox
+    QLineEdit, QPushButton, QGroupBox, QGridLayout, QComboBox, QScrollArea, QCheckBox, QSlider
 )
 
 class QuantumCircuitGUI(QWidget):
@@ -21,6 +20,9 @@ class QuantumCircuitGUI(QWidget):
         super().__init__()
         self.simulator = AerSimulator()
         self.initUI()
+        self.Sx = []
+        self.Sy = []
+        self.Sz = []
 
 
     def initUI(self):
@@ -151,25 +153,42 @@ class QuantumCircuitGUI(QWidget):
                 font-weight: bold;
             }
         """)
-        explore_layout = QGridLayout()
-        explore_params = ['Error difference:', 'Spin correlation:', 'Frustration level:']
-        
-        for i, param in enumerate(explore_params):
+        explore_layout = QVBoxLayout()
+
+        # Slider
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(100)
+        self.slider.setValue(50)
+        self.slider.valueChanged.connect(self.on_slider_value_changed)
+        explore_layout.addWidget(self.slider)
+        self.time_step_label = QLabel('Time step: 0')
+        explore_layout.addWidget(self.time_step_label)
+
+        # Explore parameters
+        explore_params = ['Sx:', 'Sy:', 'Sz:']
+
+        self.explore_labels = []
+        self.explore_edits = []
+
+        for param in explore_params:
             label = QLabel(param)
             edit = QLineEdit()
             edit.setDisabled(True)  # Disable the input fields
-            explore_layout.addWidget(label, i, 0)
-            explore_layout.addWidget(edit, i, 1)
-        
+            explore_layout.addWidget(label)
+            explore_layout.addWidget(edit)
+            self.explore_labels.append(label)
+            self.explore_edits.append(edit)
+
         explore_group.setLayout(explore_layout)
         bottom_layout.addWidget(explore_group)
-        
+
         # Add bottom layout to main layout
         main_layout.addLayout(bottom_layout)
 
         # Toggle switch and input field
         toggle_layout = QHBoxLayout()
-        self.toggle_switch = QCheckBox('Do you want to connect to a real IBM quantum computer ?')
+        self.toggle_switch = QCheckBox('Enable API Key')
         self.api_key_input = QLineEdit()
         self.api_key_input.setPlaceholderText('Your API Key ...')
         self.api_key_input.setDisabled(True)
@@ -213,6 +232,7 @@ class QuantumCircuitGUI(QWidget):
             B_0 = float(params.get('Magnetic field strength:', 1))
             del_t = float(params.get('Time interval:', 2))
             circ_1, (Sx, Sy, Sz) = self.build_spin_one_system(mu, B_0, del_t, is_api_key_enabled, api_key_value)
+            self.Sx, self.Sy, self.Sz = Sx, Sy, Sz
             spin_1 = True
 
         elif selected_spin == 1:  # If Spin-2 System is selected
@@ -228,6 +248,7 @@ class QuantumCircuitGUI(QWidget):
             lambda_2 = float(params.get('lambda_2:', 11))
 
             circ_1, circ_2, circ_3, (Sx1, Sy1), (Sz1, Sx2), (Sy2, Sz2) = self.build_spin_two_system(del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, is_api_key_enabled, api_key_value)
+            self.Sx, self.Sy, self.Sz = Sx1, Sy1, Sz1
             spin_2 = True
 
         elif selected_spin == 2:  # If Spin-3 System is selected
@@ -247,6 +268,7 @@ class QuantumCircuitGUI(QWidget):
             num_trotter_steps = int(params.get('Number of Trotter steps:', 15))
 
             circ_1, circ_2, circ_3, Sx, Sy, Sz = self.build_spin_three_system(del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, theta_3, phi_3, lambda_3, num_trotter_steps, is_api_key_enabled, api_key_value)
+            self.Sx, self.Sy, self.Sz = Sx, Sy, Sz
             spin_3 = True
 
         # Draw and save the circuits
@@ -333,7 +355,7 @@ class QuantumCircuitGUI(QWidget):
         timecirc.measure(qr,cr)
 
         return timecirc, self.run_spin_one_system(timecirc, tau_range, tau, self.simulator, is_api_key_enabled, api_key_value)
-    def build_spin_two_system(self, del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2):
+    def build_spin_two_system(self, del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, is_api_key_enabled, api_key_value):
         Nt = int(10//del_t)
 
         tau = Parameter('τ')
@@ -392,8 +414,8 @@ class QuantumCircuitGUI(QWidget):
         Sy_circ = build_Sy()
         Sz_circ = build_Sz()
         
-        return Sx_circ, Sy_circ, Sz_circ, self.run_spin_two_system(Sx_circ, tau_range, tau, self.simulator), self.run_spin_two_system(Sy_circ, tau_range, tau, self.simulator), self.run_spin_two_system(Sz_circ, tau_range, tau, self.simulator)
-    def build_spin_three_system(self, del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, theta_3, phi_3, lambda_3, ntrot):
+        return Sx_circ, Sy_circ, Sz_circ, self.run_spin_two_system(Sx_circ, tau_range, tau, self.simulator, is_api_key_enabled, api_key_value), self.run_spin_two_system(Sy_circ, tau_range, tau, self.simulator, is_api_key_enabled, api_key_value), self.run_spin_two_system(Sz_circ, tau_range, tau, self.simulator, is_api_key_enabled, api_key_value)
+    def build_spin_three_system(self, del_t, Jx, Jy, Jz, theta_1, phi_1, lambda_1, theta_2, phi_2, lambda_2, theta_3, phi_3, lambda_3, ntrot, is_api_key_enabled, api_key_value):
         Nt = int(10//del_t)
 
         tau = Parameter('τ')
@@ -462,10 +484,11 @@ class QuantumCircuitGUI(QWidget):
         Sy_circ = build_Sy()
         Sz_circ = build_Sz()
 
-        return Sx_circ, Sy_circ, Sz_circ, self.run_spin_three_system(Sx_circ, tau_range, tau, self.simulator, Nt), self.run_spin_three_system(Sy_circ, tau_range, tau, self.simulator, Nt), self.run_spin_three_system(Sz_circ, tau_range, tau, self.simulator, Nt)
+        return Sx_circ, Sy_circ, Sz_circ, self.run_spin_three_system(Sx_circ, tau_range, tau, self.simulator, Nt, is_api_key_enabled, api_key_value), self.run_spin_three_system(Sy_circ, tau_range, tau, self.simulator, Nt, is_api_key_enabled, api_key_value), self.run_spin_three_system(Sz_circ, tau_range, tau, self.simulator, Nt, is_api_key_enabled, api_key_value)
 
     def run_spin_one_system(self, timecirc, tau_range, tau, simulator, is_api_key_enabled, api_key_value):
         simcounts = []
+        
         if is_api_key_enabled is False and api_key_value == "":
             Nshots = 8192
             transpiled_circ = transpile(timecirc, simulator)
@@ -474,44 +497,53 @@ class QuantumCircuitGUI(QWidget):
                 result = simulator.run(transpiled_circ_with_param, shots=Nshots).result()
                 simcounts.append(result.get_counts(transpiled_circ_with_param))
         else:
-            print("Inputs valid!")
             service, backend = self.setup_quantum_hardware(api_key_value)
-            sampler = SamplerV2(backend=backend)
+            sampler = BackendSampler(backend=backend)
             transpiled_circ = transpile(timecirc, backend)
             for t in tau_range:
                 transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
-                job_with_result = sampler.run([transpiled_circ_with_param]).result()[0]
-                print("Job done!")
-                print(job_with_result)
-                print(job_with_result.data)
-                print(job_with_result.data.get_counts())
-                simcounts.append(job_with_result.data.get_counts())
+                job_with_result = sampler.run([transpiled_circ_with_param]).result()
+                simcounts.append(job_with_result.quasi_dists[0])
 
         return self.postprocess_spin_one_system(simcounts, Nshots)
-    def run_spin_two_system(self, timecirc, tau_range, tau, simulator):
-        transpiled_circ = transpile(timecirc, simulator)
-
-        Nshots = 8192
+    def run_spin_two_system(self, timecirc, tau_range, tau, simulator, is_api_key_enabled, api_key_value):
         simcounts = []
-        for t in tau_range:
-            transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
 
-            result = simulator.run(transpiled_circ_with_param, shots=Nshots).result()
-
-            simcounts.append(result.get_counts(transpiled_circ_with_param))
+        if is_api_key_enabled is False and api_key_value == "":
+            Nshots = 8192
+            transpiled_circ = transpile(timecirc, simulator)
+            for t in tau_range:
+                transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
+                result = simulator.run(transpiled_circ_with_param, shots=Nshots).result()
+                simcounts.append(result.get_counts(transpiled_circ_with_param))
+        else:
+            service, backend = self.setup_quantum_hardware(api_key_value)
+            sampler = BackendSampler(backend=backend)
+            transpiled_circ = transpile(timecirc, backend)
+            for t in tau_range:
+                transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
+                job_with_result = sampler.run([transpiled_circ_with_param]).result()
+                simcounts.append(job_with_result.quasi_dists[0])
 
         return self.postprocess_spin_two_system(simcounts, Nshots)
-    def run_spin_three_system(self, timecirc, tau_range, tau, simulator, Nt):
-        transpiled_circ = transpile(timecirc, simulator)
-
-        Nshots = 8192
+    def run_spin_three_system(self, timecirc, tau_range, tau, simulator, Nt, is_api_key_enabled, api_key_value):
         simcounts = []
-        for t in tau_range:
-            transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
-
-            result = simulator.run(transpiled_circ_with_param, shots=Nshots).result()
-
-            simcounts.append(result.get_counts(transpiled_circ_with_param))
+        
+        if is_api_key_enabled is False and api_key_value == "":
+            Nshots = 8192
+            transpiled_circ = transpile(timecirc, simulator)
+            for t in tau_range:
+                transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
+                result = simulator.run(transpiled_circ_with_param, shots=Nshots).result()
+                simcounts.append(result.get_counts(transpiled_circ_with_param))
+        else:
+            service, backend = self.setup_quantum_hardware(api_key_value)
+            sampler = BackendSampler(backend=backend)
+            transpiled_circ = transpile(timecirc, backend)
+            for t in tau_range:
+                transpiled_circ_with_param = transpiled_circ.assign_parameters({tau: t})
+                job_with_result = sampler.run([transpiled_circ_with_param]).result()
+                simcounts.append(job_with_result.quasi_dists[0])
 
         return self.postprocess_spin_three_system(simcounts, Nshots, Nt)
 
@@ -702,6 +734,15 @@ class QuantumCircuitGUI(QWidget):
             self.api_key_input.setDisabled(False)
         else:
             self.api_key_input.setDisabled(True)
+    def on_slider_value_changed(self):
+            slider_value = self.slider.value()
+            Nt = len(self.Sx)
+            if Nt > 0:
+                index = int((slider_value / 100) * (Nt - 1))
+                self.explore_edits[0].setText(f'{self.Sx[index]:.4f}')
+                self.explore_edits[1].setText(f'{self.Sy[index]:.4f}')
+                self.explore_edits[2].setText(f'{self.Sz[index]:.4f}')
+                self.time_step_label.setText(f'Time step: {index}')
 
 
 if __name__ == '__main__':
